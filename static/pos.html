@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>หมาล่าหมี POS</title>
+  <meta name="description" content="หมาล่าหมี Point of Sale Dashboard">
+  <link rel="stylesheet" href="/static/css/style.css">
+  <style>
+    body { overflow: hidden; }
+
+    .pos-layout { display: flex; flex-direction: column; height: 100vh; }
+
+    /* ── Topbar stats ─────────────────────────────────────────── */
+    .pos-stats { display: flex; align-items: center; gap: 20px; font-size: 0.82rem; color: var(--text-secondary); }
+    .stat-chip {
+      display: flex; align-items: center; gap: 6px;
+      background: var(--bg-card); border: 1px solid var(--border);
+      border-radius: 99px; padding: 4px 12px;
+    }
+
+    /* ── Kanban ──────────────────────────────────────────────── */
+    .kanban { display: grid; grid-template-columns: repeat(3,1fr); gap: 16px; padding: 16px; flex: 1; overflow: hidden; }
+    .kanban-col {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      display: flex; flex-direction: column;
+      overflow: hidden;
+    }
+    .col-header {
+      padding: 14px 16px; border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: space-between;
+      flex-shrink: 0;
+    }
+    .col-title { font-weight: 700; font-size: 0.95rem; display: flex; align-items: center; gap: 8px; }
+    .col-count {
+      background: var(--bg-card); color: var(--text-secondary);
+      border-radius: 99px; padding: 2px 10px; font-size: 0.78rem; font-weight: 700;
+    }
+    .col-body { flex: 1; overflow-y: auto; padding: 12px; display: flex; flex-direction: column; gap: 10px; }
+
+    /* ── Order Card ──────────────────────────────────────────── */
+    .order-card {
+      background: var(--bg-card); border: 1px solid var(--border);
+      border-radius: var(--radius-md); padding: 14px;
+      transition: var(--transition); cursor: default;
+      animation: slideDown 0.3s ease-out;
+    }
+    .order-card:hover { border-color: var(--border-accent); box-shadow: var(--shadow-sm); }
+    @keyframes slideDown { from { opacity:0; transform:translateY(-10px); } to { opacity:1; transform:translateY(0); } }
+    .order-card-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+    .order-card-id { font-weight: 700; font-size: 0.95rem; }
+    .order-table-badge {
+      background: rgba(255,109,40,0.15); color: var(--clr-brand);
+      border: 1px solid rgba(255,109,40,0.3); border-radius: 99px;
+      padding: 2px 10px; font-size: 0.78rem; font-weight: 700;
+    }
+    .order-items-list { margin-bottom: 10px; }
+    .order-item-row { display: flex; justify-content: space-between; font-size: 0.82rem; padding: 3px 0; color: var(--text-secondary); }
+    .order-item-name { flex: 1; }
+    .order-item-qty { color: var(--text-muted); margin: 0 8px; }
+    .order-item-price { color: var(--clr-brand); font-weight: 600; }
+    .order-toppings { font-size: 0.74rem; color: var(--text-muted); }
+    .order-footer { display: flex; align-items: center; justify-content: space-between; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); }
+    .order-total { font-size: 1rem; font-weight: 800; color: var(--clr-brand); }
+    .order-time { font-size: 0.75rem; color: var(--text-muted); }
+    .order-actions { display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap; }
+
+    /* ── Cancel Modal ────────────────────────────────────────── */
+    #cancel-overlay .modal { max-width: 400px; }
+
+    /* ── Responsive ──────────────────────────────────────────── */
+    @media (max-width: 900px) {
+      body { overflow: auto; }
+      .pos-layout { height: auto; min-height: 100vh; }
+      .kanban { grid-template-columns: 1fr; overflow: visible; }
+      .kanban-col { max-height: none; }
+    }
+    @media (max-width: 480px) {
+      .pos-stats { display: none; }
+      .kanban { padding: 10px; gap: 12px; }
+    }
+  </style>
+</head>
+<body>
+<div class="pos-layout">
+  <!-- Topbar -->
+  <header class="topbar">
+    <a class="topbar-brand" href="#">
+      <img src="/img/logo.png" alt="Logo" style="width:28px;height:28px;border-radius:50%;object-fit:cover;" onerror="this.style.display='none'">
+      <span data-i18n="pos_title">หมาล่าหมี POS</span>
+    </a>
+    <div class="topbar-actions">
+      <div class="pos-stats">
+        <div class="stat-chip">
+          <span class="ws-dot" id="ws-dot" style="width:8px;height:8px;border-radius:50%;background:var(--clr-green);animation:pulse 2s infinite;display:inline-block;"></span>
+          <span id="ws-label">Live</span>
+        </div>
+        <div class="stat-chip">⏳ <span id="stat-pending">0</span></div>
+        <div class="stat-chip">🔥 <span id="stat-serving">0</span></div>
+        <div class="stat-chip">✅ <span id="stat-done">0</span></div>
+      </div>
+      <div class="lang-switcher">
+        <button class="lang-btn" data-lang="th">ไทย</button>
+        <button class="lang-btn" data-lang="en">EN</button>
+        <button class="lang-btn" data-lang="zh">中</button>
+      </div>
+      <a href="/history" class="btn btn-secondary btn-sm">📊</a>
+    </div>
+  </header>
+
+  <!-- Kanban Board -->
+  <div class="kanban">
+    <!-- Pending -->
+    <div class="kanban-col" id="col-pending">
+      <div class="col-header">
+        <div class="col-title"><span class="status-dot dot-pending"></span> <span data-i18n="col_pending">⏳ รอรับออเดอร์</span></div>
+        <span class="col-count" id="count-pending">0</span>
+      </div>
+      <div class="col-body" id="body-pending">
+        <div class="empty-state"><div class="empty-icon">☕</div><p>ไม่มีออเดอร์ใหม่</p></div>
+      </div>
+    </div>
+
+    <!-- Serving -->
+    <div class="kanban-col" id="col-serving">
+      <div class="col-header">
+        <div class="col-title"><span class="status-dot dot-serving"></span> <span data-i18n="col_serving">🔥 กำลังเสิร์ฟ</span></div>
+        <span class="col-count" id="count-serving">0</span>
+      </div>
+      <div class="col-body" id="body-serving">
+        <div class="empty-state"><div class="empty-icon">👨‍🍳</div><p>ยังไม่มีออเดอร์ที่รับแล้ว</p></div>
+      </div>
+    </div>
+
+    <!-- Done -->
+    <div class="kanban-col" id="col-done">
+      <div class="col-header">
+        <div class="col-title"><span class="status-dot dot-done"></span> <span data-i18n="col_done">✅ เสร็จสิ้น</span></div>
+        <span class="col-count" id="count-done">0</span>
+      </div>
+      <div class="col-body" id="body-done">
+        <div class="empty-state"><div class="empty-icon">🎉</div><p>ยังไม่มีออเดอร์ที่เสร็จ</p></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Cancel Modal -->
+<div class="modal-overlay" id="cancel-overlay">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 class="modal-title">❌ <span data-i18n="cancel_order">ยกเลิกออเดอร์</span></h3>
+      <button class="modal-close" id="cancel-modal-close">✕</button>
+    </div>
+    <label class="label" data-i18n="cancel_reason_label">เหตุผลการยกเลิก</label>
+    <textarea class="input textarea" id="cancel-reason-input" data-i18n-placeholder="cancel_reason_placeholder"></textarea>
+    <div style="display:flex;gap:10px;margin-top:16px;">
+      <button class="btn btn-secondary" style="flex:1;" id="cancel-modal-back" data-i18n="cancel">ยกเลิก</button>
+      <button class="btn btn-danger" style="flex:2;" id="cancel-confirm-btn" data-i18n="confirm">ยืนยัน</button>
+    </div>
+  </div>
+</div>
+
+<script src="/static/js/i18n.js"></script>
+<script>
+  let orders = {};
+  let cancelTargetId = null;
+
+  // Fetch existing orders on load
+  async function loadOrders() {
+    try {
+      const res = await fetch('/api/orders');
+      const list = await res.json();
+      orders = {};
+      list.forEach(o => orders[o.id] = o);
+      renderAll();
+    } catch (e) { console.error(e); }
+  }
+
+  function elapsed(createdAt) {
+    const diff = Math.floor((Date.now() - new Date(createdAt)) / 60000);
+    return diff + ' ' + I18N.t('min');
+  }
+
+  function buildCard(order) {
+    const card = document.createElement('div');
+    card.className = 'order-card';
+    card.id = 'order-card-' + order.id;
+
+    const langKey = { th: 'menu_item_name_th', en: 'menu_item_name_en', zh: 'menu_item_name_zh' };
+    const nameField = langKey[I18N.currentLang] || 'menu_item_name_th';
+
+    const itemsHTML = order.items.map(item => {
+      const name = item[nameField] || item.menu_item_name_th;
+      const tps = item.toppings?.map(t => t['name_' + I18N.currentLang] || t.name_th).join(', ');
+      return `<div class="order-item-row">
+        <span class="order-item-name">${name}</span>
+        <span class="order-item-qty">x${item.quantity}</span>
+        <span class="order-item-price">฿${(item.unit_price*item.quantity).toFixed(0)}</span>
+      </div>
+      ${tps ? `<div class="order-toppings">🍴 ${tps}</div>` : ''}
+      ${item.notes ? `<div class="order-toppings">📝 ${item.notes}</div>` : ''}`;
+    }).join('');
+
+    let actionsHTML = '';
+    if (order.status === 'pending') {
+      actionsHTML = `
+        <button class="btn btn-success btn-sm" onclick="updateStatus(${order.id},'serving')" data-i18n="accept">${I18N.t('accept')}</button>
+        <button class="btn btn-danger btn-sm" onclick="openCancel(${order.id})" data-i18n="cancel_order">${I18N.t('cancel_order')}</button>`;
+    } else if (order.status === 'serving') {
+      actionsHTML = `
+        <button class="btn btn-primary btn-sm" onclick="updateStatus(${order.id},'done')" data-i18n="serve">${I18N.t('serve')} 🍽️</button>
+        <button class="btn btn-danger btn-sm" onclick="openCancel(${order.id})" data-i18n="cancel_order">${I18N.t('cancel_order')}</button>`;
+    }
+
+    card.innerHTML = `
+      <div class="order-card-header">
+        <span class="order-card-id">#${order.id}</span>
+        <span class="order-table-badge">${I18N.t('table')} ${order.table_number}</span>
+      </div>
+      <div class="order-items-list">${itemsHTML}</div>
+      <div class="order-footer">
+        <span class="order-total">฿${order.total.toFixed(0)}</span>
+        <span class="order-time">${elapsed(order.created_at)}</span>
+      </div>
+      ${actionsHTML ? `<div class="order-actions">${actionsHTML}</div>` : ''}`;
+    return card;
+  }
+
+  function renderAll() {
+    const cols = { pending: [], serving: [], done: [] };
+    Object.values(orders).forEach(o => {
+      if (cols[o.status]) cols[o.status].push(o);
+    });
+    // Sort: newest first for done, oldest first for pending/serving
+    cols.pending.sort((a,b) => new Date(a.created_at) - new Date(b.created_at));
+    cols.serving.sort((a,b) => new Date(a.created_at) - new Date(b.created_at));
+    cols.done.sort((a,b) => new Date(b.updated_at) - new Date(a.updated_at));
+
+    ['pending','serving','done'].forEach(status => {
+      const body = document.getElementById('body-' + status);
+      const items = cols[status];
+      document.getElementById('count-' + status).textContent = items.length;
+      document.getElementById('stat-' + status).textContent = items.length;
+
+      if (!items.length) {
+        const icons = { pending: '☕', serving: '👨‍🍳', done: '🎉' };
+        const msgs = { pending: 'ไม่มีออเดอร์ใหม่', serving: 'ยังไม่มีออเดอร์ที่รับแล้ว', done: 'ยังไม่มีออเดอร์ที่เสร็จ' };
+        body.innerHTML = `<div class="empty-state"><div class="empty-icon">${icons[status]}</div><p>${msgs[status]}</p></div>`;
+        return;
+      }
+      body.innerHTML = '';
+      items.forEach(o => body.appendChild(buildCard(o)));
+    });
+  }
+
+  document.addEventListener('langChange', renderAll);
+
+  async function updateStatus(orderId, status) {
+    try {
+      const res = await fetch(`/api/orders/${orderId}/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status }),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        showToast(err.detail || I18N.t('error'), 'error');
+      }
+    } catch { showToast(I18N.t('error'), 'error'); }
+  }
+
+  // Cancel modal
+  function openCancel(orderId) {
+    cancelTargetId = orderId;
+    document.getElementById('cancel-reason-input').value = '';
+    document.getElementById('cancel-overlay').classList.add('active');
+  }
+  function closeCancel() {
+    cancelTargetId = null;
+    document.getElementById('cancel-overlay').classList.remove('active');
+  }
+  document.getElementById('cancel-modal-close').onclick = closeCancel;
+  document.getElementById('cancel-modal-back').onclick = closeCancel;
+  document.getElementById('cancel-overlay').onclick = e => { if (e.target === e.currentTarget) closeCancel(); };
+  document.getElementById('cancel-confirm-btn').onclick = async () => {
+    if (!cancelTargetId) return;
+    const reason = document.getElementById('cancel-reason-input').value.trim();
+    await updateStatus(cancelTargetId, 'cancelled', reason);
+    closeCancel();
+  };
+  // Override updateStatus to support cancel reason
+  async function updateStatus(orderId, status, cancelReason = '') {
+    try {
+      const res = await fetch(`/api/orders/${orderId}/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status, cancel_reason: cancelReason }),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        showToast(err.detail || I18N.t('error'), 'error');
+      }
+    } catch { showToast(I18N.t('error'), 'error'); }
+  }
+
+  // WebSocket
+  const wsDot = document.getElementById('ws-dot');
+  createWS(msg => {
+    wsDot.style.background = 'var(--clr-green)';
+    if (msg.event === 'order_created') {
+      const o = msg.order;
+      orders[o.id] = o;
+      renderAll();
+      showToast(`${I18N.t('new_order_toast')} ${o.table_number} · #${o.id}`, 'warning', 5000);
+      // Play ping
+      try { new Audio('data:audio/wav;base64,UklGRl9vT19XQVZFZm10IBAAAA...').play(); } catch {}
+    } else if (msg.event === 'order_updated') {
+      const o = msg.order;
+      if (o.status === 'cancelled') {
+        delete orders[o.id];
+      } else {
+        orders[o.id] = o;
+      }
+      renderAll();
+      showToast(`${I18N.t('order_updated_toast')} #${o.id} → ${o.status}`, 'info', 3000);
+    }
+  });
+
+  // Refresh elapsed times every minute
+  setInterval(() => {
+    document.querySelectorAll('.order-time').forEach(el => {
+      const card = el.closest('.order-card');
+      if (card) {
+        const orderId = parseInt(card.id.replace('order-card-',''));
+        const o = orders[orderId];
+        if (o) el.textContent = elapsed(o.created_at);
+      }
+    });
+  }, 60000);
+
+  loadOrders();
+</script>
+</body>
+</html>

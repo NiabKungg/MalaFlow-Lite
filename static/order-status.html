@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>หมาล่าหมี - สถานะออเดอร์</title>
+  <meta name="description" content="ติดตามสถานะออเดอร์ของคุณ">
+  <link rel="stylesheet" href="/static/css/style.css">
+  <style>
+    body { background: radial-gradient(ellipse at 50% 0%, rgba(255,109,40,0.15) 0%, transparent 60%), var(--bg-primary); }
+    .status-page { min-height: 100vh; display: flex; flex-direction: column; }
+    .status-hero {
+      flex: 1; display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      padding: 32px 24px; text-align: center;
+    }
+    .status-card {
+      background: var(--bg-card); border: 1px solid var(--border);
+      border-radius: var(--radius-xl); padding: 36px;
+      max-width: 480px; width: 100%;
+      box-shadow: var(--shadow-md);
+    }
+    .status-icon { font-size: 4.5rem; margin-bottom: 16px; animation: statusAnim 1s ease-out; }
+    @keyframes statusAnim { from { transform: scale(0.5); opacity:0; } to { transform: scale(1); opacity:1; } }
+    .status-label { font-size: 1.5rem; font-weight: 800; margin-bottom: 6px; }
+    .status-sub { color: var(--text-secondary); margin-bottom: 24px; font-size: 0.95rem; }
+    .status-meta { text-align: left; background: var(--bg-secondary); border-radius: var(--radius-md); padding: 16px; margin-bottom: 20px; }
+    .status-meta-row { display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 0.9rem; }
+    .status-meta-row:last-child { margin-bottom: 0; }
+    .meta-label { color: var(--text-secondary); }
+    .meta-val { font-weight: 600; }
+
+    /* Progress bar */
+    .progress-track { display: flex; align-items: center; margin: 24px 0; position: relative; }
+    .progress-track::before {
+      content: ''; position: absolute; top: 14px; left: 14px; right: 14px; height: 2px;
+      background: var(--border); z-index: 0;
+    }
+    .step { display: flex; flex-direction: column; align-items: center; gap: 6px; flex: 1; z-index: 1; }
+    .step-dot {
+      width: 28px; height: 28px; border-radius: 50%;
+      background: var(--bg-secondary); border: 2px solid var(--border);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 0.8rem; transition: var(--transition-slow);
+    }
+    .step.active .step-dot { background: var(--clr-brand); border-color: var(--clr-brand); box-shadow: 0 0 12px rgba(255,109,40,0.5); }
+    .step.done .step-dot { background: var(--clr-green); border-color: var(--clr-green); color: #fff; }
+    .step.cancelled .step-dot { background: var(--clr-red); border-color: var(--clr-red); }
+    .step-label { font-size: 0.72rem; color: var(--text-muted); text-align: center; }
+    .step.active .step-label, .step.done .step-label { color: var(--text-primary); font-weight: 600; }
+
+    .items-list { text-align: left; margin-top: 16px; }
+    .item-row {
+      display: flex; justify-content: space-between; align-items: flex-start;
+      padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 0.88rem;
+    }
+    .item-row:last-child { border-bottom: none; }
+    .item-name { font-weight: 500; }
+    .item-qty { color: var(--text-secondary); }
+    .item-price { color: var(--clr-brand); font-weight: 600; }
+
+    .ws-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--clr-green); display: inline-block; animation: pulse 2s infinite; }
+    .ws-dot.disconnected { background: var(--clr-red); animation: none; }
+  </style>
+</head>
+<body>
+<header class="topbar">
+  <a class="topbar-brand" href="/order">
+    <img src="/img/logo.png" alt="Logo" style="width:28px;height:28px;border-radius:50%;object-fit:cover;" onerror="this.style.display='none'">
+    <span data-i18n="brand">หมาล่าหมี</span>
+  </a>
+  <div class="topbar-actions">
+    <span class="ws-dot" id="ws-dot" title="Live"></span>
+    <div class="lang-switcher">
+      <button class="lang-btn" data-lang="th">ไทย</button>
+      <button class="lang-btn" data-lang="en">EN</button>
+      <button class="lang-btn" data-lang="zh">中</button>
+    </div>
+  </div>
+</header>
+
+<div class="status-page">
+  <div class="status-hero">
+    <!-- Loading -->
+    <div id="loading-state">
+      <div class="spinner" style="margin:auto;"></div>
+      <p style="margin-top:16px;color:var(--text-secondary);" data-i18n="loading">กำลังโหลด...</p>
+    </div>
+
+    <!-- No order -->
+    <div id="no-order-state" style="display:none;" class="status-card">
+      <div class="status-icon">😕</div>
+      <div class="status-label" data-i18n="no_order">ไม่พบออเดอร์</div>
+      <a href="/order" id="back-to-menu-btn-1" class="btn btn-primary" style="margin-top:20px;" data-i18n="back_to_menu">กลับไปสั่งอาหาร</a>
+    </div>
+
+    <!-- Order status -->
+    <div id="order-state" style="display:none;" class="status-card">
+      <div class="status-icon" id="status-icon">⏳</div>
+      <div class="status-label" id="status-label"></div>
+      <div class="status-sub" id="status-sub"></div>
+
+      <div class="progress-track">
+        <div class="step" id="step-pending">
+          <div class="step-dot">1</div>
+          <div class="step-label" data-i18n="status_pending">⏳ รอ</div>
+        </div>
+        <div class="step" id="step-serving">
+          <div class="step-dot">2</div>
+          <div class="step-label" data-i18n="status_serving">🔥 เตรียม</div>
+        </div>
+        <div class="step" id="step-done">
+          <div class="step-dot">3</div>
+          <div class="step-label" data-i18n="status_done">✅ เสิร์ฟ</div>
+        </div>
+      </div>
+
+      <div class="status-meta">
+        <div class="status-meta-row">
+          <span class="meta-label" data-i18n="order_id">หมายเลขออเดอร์</span>
+          <span class="meta-val" id="meta-order-id">#-</span>
+        </div>
+        <div class="status-meta-row">
+          <span class="meta-label" data-i18n="table">โต๊ะ</span>
+          <span class="meta-val" id="meta-table">-</span>
+        </div>
+        <div class="status-meta-row">
+          <span class="meta-label" data-i18n="total">ยอดรวม</span>
+          <span class="meta-val" id="meta-total" style="color:var(--clr-brand);">-</span>
+        </div>
+      </div>
+
+      <div class="items-list" id="items-list"></div>
+
+      <div id="cancel-block" style="display:none;margin-top:16px;padding:12px;background:rgba(239,68,68,0.1);border-radius:var(--radius-sm);border:1px solid rgba(239,68,68,0.2);text-align:left;">
+        <strong style="color:var(--clr-red);" data-i18n="status_cancelled">❌ ยกเลิก</strong>
+        <p id="cancel-reason-text" style="font-size:0.85rem;color:var(--text-secondary);margin-top:4px;"></p>
+      </div>
+
+      <div style="display:flex;gap:12px;margin-top:24px;">
+        <a href="/order" id="back-to-menu-btn-2" class="btn btn-secondary" style="flex:1;" data-i18n="back_to_menu">กลับเมนู</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="/static/js/i18n.js"></script>
+<script>
+  const params = new URLSearchParams(location.search);
+  let orderId = params.get('order_id') || localStorage.getItem('malaflow_order_id');
+  let currentOrder = null;
+
+  const tableData = JSON.parse(localStorage.getItem('malaflow_table') || 'null');
+  const backUrl = tableData ? `/order?table=${tableData.number}` : '/order';
+  document.getElementById('back-to-menu-btn-1').href = backUrl;
+  document.getElementById('back-to-menu-btn-2').href = backUrl;
+
+  const statusConfig = {
+    pending: { icon: '⏳', label: 'status_pending', sub: 'ออเดอร์กำลังรอรับ · Waiting to be accepted' },
+    serving: { icon: '🔥', label: 'status_serving', sub: 'อาหารกำลังถูกเตรียม · Kitchen is preparing your food' },
+    done:    { icon: '✅', label: 'status_done',    sub: 'เสิร์ฟแล้ว ขอบคุณที่ใช้บริการ · Served, thank you!' },
+    cancelled: { icon: '❌', label: 'status_cancelled', sub: 'ออเดอร์ถูกยกเลิก · Order cancelled' },
+  };
+
+  function updateUI(order) {
+    currentOrder = order;
+    document.getElementById('loading-state').style.display = 'none';
+    document.getElementById('no-order-state').style.display = 'none';
+    document.getElementById('order-state').style.display = 'block';
+
+    const cfg = statusConfig[order.status] || statusConfig.pending;
+    document.getElementById('status-icon').textContent = cfg.icon;
+    document.getElementById('status-label').textContent = I18N.t(cfg.label);
+    document.getElementById('status-sub').textContent = cfg.sub;
+    document.getElementById('meta-order-id').textContent = '#' + order.id;
+    document.getElementById('meta-table').textContent = I18N.t('table') + ' ' + order.table_number;
+    document.getElementById('meta-total').textContent = '฿' + order.total.toFixed(0);
+
+    // Progress steps
+    const steps = ['pending', 'serving', 'done'];
+    steps.forEach(s => {
+      const el = document.getElementById('step-' + s);
+      el.className = 'step';
+      if (order.status === 'cancelled') {
+        el.querySelector('.step-dot').textContent = s === 'pending' ? '✓' : s === 'serving' ? '✕' : '3';
+        return;
+      }
+      const idx = steps.indexOf(s);
+      const curIdx = steps.indexOf(order.status);
+      if (idx < curIdx) { el.classList.add('done'); el.querySelector('.step-dot').textContent = '✓'; }
+      else if (idx === curIdx) { el.classList.add('active'); el.querySelector('.step-dot').textContent = cfg.icon; }
+    });
+
+    // Items
+    const itemsList = document.getElementById('items-list');
+    itemsList.innerHTML = '';
+    order.items.forEach(item => {
+      const row = document.createElement('div');
+      row.className = 'item-row';
+      const name = I18N.currentLang === 'zh' ? item.menu_item_name_zh || item.menu_item_name_en :
+                   I18N.currentLang === 'en' ? item.menu_item_name_en : item.menu_item_name_th;
+      row.innerHTML = `
+        <div>
+          <div class="item-name">${name || item.menu_item_name_th}</div>
+          <div class="item-qty" style="font-size:0.78rem;color:var(--text-muted);">${item.toppings?.map(t=>t.name_th).join(', ')||''}</div>
+        </div>
+        <div style="text-align:right;">
+          <div class="item-qty">x${item.quantity}</div>
+          <div class="item-price">฿${(item.unit_price * item.quantity).toFixed(0)}</div>
+        </div>`;
+      itemsList.appendChild(row);
+    });
+
+    // Cancel block
+    const cancelBlock = document.getElementById('cancel-block');
+    if (order.status === 'cancelled') {
+      cancelBlock.style.display = 'block';
+      document.getElementById('cancel-reason-text').textContent = order.cancel_reason || '';
+    } else {
+      cancelBlock.style.display = 'none';
+    }
+  }
+
+  async function loadOrder() {
+    if (!orderId) {
+      document.getElementById('loading-state').style.display = 'none';
+      document.getElementById('no-order-state').style.display = 'flex';
+      return;
+    }
+    try {
+      const res = await fetch(`/api/orders/${orderId}`);
+      if (!res.ok) throw new Error();
+      updateUI(await res.json());
+    } catch {
+      document.getElementById('loading-state').style.display = 'none';
+      document.getElementById('no-order-state').style.display = 'flex';
+    }
+  }
+
+  // WebSocket for real-time updates
+  const wsDot = document.getElementById('ws-dot');
+  createWS(msg => {
+    wsDot.className = 'ws-dot';
+    if ((msg.event === 'order_updated' || msg.event === 'order_created') && msg.order?.id == orderId) {
+      updateUI(msg.order);
+    }
+  });
+
+  document.addEventListener('langChange', () => { if (currentOrder) updateUI(currentOrder); });
+  loadOrder();
+</script>
+</body>
+</html>

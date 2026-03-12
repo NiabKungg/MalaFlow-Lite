@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>หมาล่าหมี - ประวัติการขาย</title>
+  <meta name="description" content="ประวัติการขายและสรุปยอดประจำวัน">
+  <link rel="stylesheet" href="/static/css/style.css">
+  <style>
+    body { background: var(--bg-primary); }
+    .history-layout { max-width: 1100px; margin: 0 auto; padding: 24px 16px; }
+
+    /* ── PIN Gate ─────────────────────────────────────────────── */
+    #pin-gate {
+      position: fixed; inset: 0; z-index: 500;
+      background: rgba(0,0,0,0.85); backdrop-filter: blur(12px);
+      display: flex; align-items: center; justify-content: center; padding: 24px;
+    }
+    .pin-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-xl); padding: 40px 36px; max-width: 360px; width: 100%; text-align: center; }
+    .pin-icon { font-size: 3rem; margin-bottom: 12px; }
+    .pin-dots { display: flex; gap: 12px; justify-content: center; margin: 24px 0; }
+    .pin-dot { width: 16px; height: 16px; border-radius: 50%; border: 2px solid var(--border); transition: var(--transition); }
+    .pin-dot.filled { background: var(--clr-brand); border-color: var(--clr-brand); }
+    .pin-pad { display: grid; grid-template-columns: repeat(3,1fr); gap: 10px; }
+    .pin-key {
+      aspect-ratio: 1; border-radius: var(--radius-md);
+      border: 1px solid var(--border); background: var(--bg-secondary);
+      font-size: 1.3rem; font-weight: 700; cursor: pointer;
+      transition: var(--transition); color: var(--text-primary); font-family: inherit;
+    }
+    .pin-key:hover { background: var(--bg-card); border-color: var(--clr-brand); }
+    .pin-key:active { transform: scale(0.92); }
+    .pin-key.pin-del { font-size: 1rem; }
+    .pin-error { color: var(--clr-red); font-size: 0.88rem; margin-top: 12px; min-height: 20px; }
+
+    /* ── Summary Cards ────────────────────────────────────────── */
+    .summary-grid { display: grid; grid-template-columns: repeat(4,1fr); gap: 14px; margin-bottom: 28px; }
+    .summary-card {
+      background: var(--bg-card); border: 1px solid var(--border);
+      border-radius: var(--radius-md); padding: 20px;
+      text-align: center;
+    }
+    .summary-val { font-size: 1.8rem; font-weight: 800; margin-bottom: 4px; }
+    .summary-label { font-size: 0.8rem; color: var(--text-secondary); }
+    .val-brand { color: var(--clr-brand); }
+    .val-green { color: var(--clr-green); }
+    .val-red { color: var(--clr-red); }
+    .val-blue { color: var(--clr-blue); }
+
+    /* ── Filters ─────────────────────────────────────────────── */
+    .filter-bar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 20px; }
+    .filter-group { display: flex; gap: 4px; }
+    .filter-btn {
+      padding: 6px 14px; border-radius: 99px; font-size: 0.82rem; font-weight: 600;
+      border: 1px solid var(--border); background: none; color: var(--text-secondary);
+      cursor: pointer; transition: var(--transition); font-family: inherit;
+    }
+    .filter-btn.active, .filter-btn:hover { background: var(--clr-brand); color: #fff; border-color: var(--clr-brand); }
+
+    /* ── Orders Table ─────────────────────────────────────────── */
+    .orders-table-wrap { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; }
+    table { width: 100%; border-collapse: collapse; }
+    thead th {
+      background: var(--bg-secondary); padding: 12px 16px;
+      text-align: left; font-size: 0.78rem; font-weight: 700;
+      color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.05em;
+      border-bottom: 1px solid var(--border);
+    }
+    tbody tr { border-bottom: 1px solid var(--border); transition: var(--transition); }
+    tbody tr:last-child { border-bottom: none; }
+    tbody tr:hover { background: rgba(255,255,255,0.025); }
+    tbody td { padding: 12px 16px; font-size: 0.88rem; vertical-align: top; }
+    .expand-btn {
+      background: none; border: 1px solid var(--border); border-radius: 6px;
+      color: var(--text-secondary); cursor: pointer; padding: 3px 10px; font-size: 0.75rem;
+      font-family: inherit; transition: var(--transition);
+    }
+    .expand-btn:hover { border-color: var(--clr-brand); color: var(--clr-brand); }
+    .items-row { display: none; background: var(--bg-secondary); }
+    .items-row.open { display: table-row; }
+    .items-inner { padding: 12px 16px 16px; }
+    .item-detail { display: flex; justify-content: space-between; padding: 4px 0; font-size: 0.82rem; border-bottom: 1px solid var(--border); }
+    .item-detail:last-child { border-bottom: none; }
+
+    @media (max-width: 768px) {
+      .summary-grid { grid-template-columns: repeat(2,1fr); }
+      table { display: block; overflow-x: auto; }
+    }
+    @media (max-width: 480px) {
+      .summary-grid { grid-template-columns: 1fr 1fr; }
+      .filter-bar { gap: 8px; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ─── PIN Gate ─────────────────────────────────────── -->
+<div id="pin-gate">
+  <div class="pin-card">
+    <div class="pin-icon">🔐</div>
+    <h2 style="margin-bottom:6px;" data-i18n="enter_pin">กรอก PIN</h2>
+    <p style="color:var(--text-secondary);font-size:0.88rem;" data-i18n="pin_label">รหัส PIN 4 หลัก</p>
+    <div class="pin-dots">
+      <div class="pin-dot" id="pd0"></div>
+      <div class="pin-dot" id="pd1"></div>
+      <div class="pin-dot" id="pd2"></div>
+      <div class="pin-dot" id="pd3"></div>
+    </div>
+    <div class="pin-pad">
+      <button class="pin-key" data-digit="1">1</button>
+      <button class="pin-key" data-digit="2">2</button>
+      <button class="pin-key" data-digit="3">3</button>
+      <button class="pin-key" data-digit="4">4</button>
+      <button class="pin-key" data-digit="5">5</button>
+      <button class="pin-key" data-digit="6">6</button>
+      <button class="pin-key" data-digit="7">7</button>
+      <button class="pin-key" data-digit="8">8</button>
+      <button class="pin-key" data-digit="9">9</button>
+      <button class="pin-key" data-digit="0" style="grid-column:2;">0</button>
+      <button class="pin-key pin-del" id="pin-del">⌫</button>
+    </div>
+    <div class="pin-error" id="pin-error"></div>
+    <div class="lang-switcher" style="margin-top:20px;justify-content:center;display:flex;">
+      <button class="lang-btn" data-lang="th">ไทย</button>
+      <button class="lang-btn" data-lang="en">EN</button>
+      <button class="lang-btn" data-lang="zh">中</button>
+    </div>
+  </div>
+</div>
+
+<!-- ─── Main History Content ──────────────────────────── -->
+<header class="topbar">
+  <a class="topbar-brand" href="/pos">
+    <img src="/img/logo.png" alt="Logo" style="width:28px;height:28px;border-radius:50%;object-fit:cover;" onerror="this.style.display='none'">
+    <span data-i18n="history_title">ประวัติการขาย</span>
+  </a>
+  <div class="topbar-actions">
+    <div class="lang-switcher">
+      <button class="lang-btn" data-lang="th">ไทย</button>
+      <button class="lang-btn" data-lang="en">EN</button>
+      <button class="lang-btn" data-lang="zh">中</button>
+    </div>
+    <a href="/pos" class="btn btn-secondary btn-sm">← POS</a>
+  </div>
+</header>
+
+<div class="history-layout" id="history-content" style="display:none;">
+  <!-- Summary Cards -->
+  <div class="summary-grid">
+    <div class="summary-card">
+      <div class="summary-val val-brand" id="sum-revenue">฿0</div>
+      <div class="summary-label" data-i18n="revenue">ยอดขาย</div>
+    </div>
+    <div class="summary-card">
+      <div class="summary-val val-green" id="sum-orders">0</div>
+      <div class="summary-label" data-i18n="orders">ออเดอร์</div>
+    </div>
+    <div class="summary-card">
+      <div class="summary-val val-red" id="sum-cancelled">0</div>
+      <div class="summary-label" data-i18n="cancelled">ยกเลิก</div>
+    </div>
+    <div class="summary-card">
+      <div class="summary-val val-blue" id="sum-avgtime">0 <span style="font-size:1rem;">นาที</span></div>
+      <div class="summary-label" data-i18n="avg_time">เวลาเฉลี่ย</div>
+    </div>
+  </div>
+
+  <!-- Filter Bar -->
+  <div class="filter-bar">
+    <div class="filter-group">
+      <button class="filter-btn active" data-days="1" data-i18n="today">วันนี้</button>
+      <button class="filter-btn" data-days="7" data-i18n="this_week">สัปดาห์นี้</button>
+      <button class="filter-btn" data-days="30">30 วัน</button>
+    </div>
+    <input type="date" id="date-filter" class="input" style="max-width:180px;" />
+    <span style="color:var(--text-secondary);font-size:0.85rem;" id="result-count"></span>
+  </div>
+
+  <!-- Table -->
+  <div class="orders-table-wrap">
+    <table id="orders-table">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th data-i18n="table">โต๊ะ</th>
+          <th data-i18n="items">รายการ</th>
+          <th data-i18n="total">ยอด</th>
+          <th>สถานะ</th>
+          <th>เวลา</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="orders-tbody"></tbody>
+    </table>
+    <div id="history-empty" class="empty-state" style="display:none;">
+      <div class="empty-icon">📭</div>
+      <p data-i18n="history_empty">ไม่มีประวัติการขาย</p>
+    </div>
+  </div>
+</div>
+
+<script src="/static/js/i18n.js"></script>
+<script>
+  // ── PIN ──────────────────────────────────────────────────
+  let pinInput = '';
+  const pinErrorEl = document.getElementById('pin-error');
+
+  function updatePinDots() {
+    for (let i = 0; i < 4; i++) {
+      document.getElementById('pd'+i).classList.toggle('filled', i < pinInput.length);
+    }
+  }
+
+  document.querySelectorAll('.pin-key[data-digit]').forEach(btn => {
+    btn.onclick = () => addPinDigit(btn.dataset.digit);
+  });
+
+  document.getElementById('pin-del').onclick = () => {
+    deletePinDigit();
+  };
+
+  function deletePinDigit() {
+    pinInput = pinInput.slice(0,-1);
+    updatePinDots();
+    pinErrorEl.textContent = '';
+  }
+
+  async function addPinDigit(digit) {
+    if (pinInput.length >= 4) return;
+    pinInput += digit;
+    updatePinDots();
+    if (pinInput.length === 4) {
+      await verifyPin();
+    }
+  }
+
+  // Keyboard support for PIN entry
+  window.addEventListener('keydown', (e) => {
+    // Only handle if PIN gate is visible
+    if (document.getElementById('pin-gate').style.display === 'none') return;
+
+    if (e.key >= '0' && e.key <= '9') {
+      addPinDigit(e.key);
+    } else if (e.key === 'Backspace') {
+      deletePinDigit();
+    }
+  });
+
+  async function verifyPin() {
+    try {
+      const res = await fetch('/api/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pin: pinInput }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        document.getElementById('pin-gate').style.display = 'none';
+        document.getElementById('history-content').style.display = 'block';
+        loadHistory(1);
+        loadSummary();
+      } else {
+        pinErrorEl.textContent = I18N.t('pin_wrong');
+        pinInput = '';
+        updatePinDots();
+        setTimeout(() => pinErrorEl.textContent = '', 2500);
+      }
+    } catch {
+      pinErrorEl.textContent = I18N.t('error');
+      pinInput = '';
+      updatePinDots();
+    }
+  }
+
+  // ── Data ─────────────────────────────────────────────────
+  let allOrders = [];
+  let activeDays = 1;
+
+  async function loadHistory(days) {
+    activeDays = days;
+    try {
+      const res = await fetch(`/api/history?days=${days}`);
+      allOrders = await res.json();
+      renderTable();
+    } catch {}
+  }
+
+  async function loadSummary(date = null) {
+    const q = date ? `?date=${date}` : '';
+    try {
+      const res = await fetch(`/api/summary${q}`);
+      const s = await res.json();
+      document.getElementById('sum-revenue').textContent = '฿' + s.total_revenue.toFixed(0);
+      document.getElementById('sum-orders').textContent = s.order_count;
+      document.getElementById('sum-cancelled').textContent = s.cancelled_count;
+      document.getElementById('sum-avgtime').innerHTML = s.avg_service_minutes + ' <span style="font-size:1rem;">' + I18N.t('min') + '</span>';
+    } catch {}
+  }
+
+  function renderTable(filterOrders = null) {
+    const orders = filterOrders || allOrders;
+    const tbody = document.getElementById('orders-tbody');
+    const emptyEl = document.getElementById('history-empty');
+    document.getElementById('result-count').textContent = `${orders.length} รายการ`;
+
+    if (!orders.length) {
+      tbody.innerHTML = '';
+      emptyEl.style.display = 'flex';
+      return;
+    }
+    emptyEl.style.display = 'none';
+
+    tbody.innerHTML = '';
+    orders.forEach(o => {
+      const dt = new Date(o.created_at);
+      const timeStr = dt.toLocaleString('th-TH', { dateStyle:'short', timeStyle:'short' });
+      const statusBadge = {
+        done: `<span class="badge badge-done">✅ ${I18N.t('status_done')}</span>`,
+        cancelled: `<span class="badge badge-cancelled">❌ ${I18N.t('status_cancelled')}</span>`,
+      }[o.status] || '';
+
+      const nameKey = 'menu_item_name_' + I18N.currentLang;
+      const shortItems = o.items.slice(0,2).map(i => i[nameKey] || i.menu_item_name_th).join(', ');
+      const moreCount = o.items.length > 2 ? ` +${o.items.length-2}` : '';
+
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td><strong>#${o.id}</strong></td>
+        <td>${I18N.t('table')} ${o.table_number}</td>
+        <td style="max-width:200px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${shortItems}${moreCount}</td>
+        <td style="color:var(--clr-brand);font-weight:700;">฿${o.total.toFixed(0)}</td>
+        <td>${statusBadge}${o.status==='cancelled'&&o.cancel_reason?`<div style="font-size:0.74rem;color:var(--text-muted);margin-top:4px;">${o.cancel_reason}</div>`:''}</td>
+        <td style="color:var(--text-secondary);font-size:0.8rem;">${timeStr}</td>
+        <td>
+          <button class="expand-btn" data-id="${o.id}" data-i18n="expand">${I18N.t('expand')}</button>
+          <button class="expand-btn" style="color:var(--clr-red);border-color:rgba(239,68,68,0.3);margin-left:4px;padding:3px 8px;" onclick="deleteOrder(${o.id})" title="Delete">🗑️</button>
+        </td>`;
+
+      const itemsRow = document.createElement('tr');
+      itemsRow.className = 'items-row';
+      itemsRow.id = `expand-${o.id}`;
+      const itemsHTML = o.items.map(i => {
+        const name = i[nameKey] || i.menu_item_name_th;
+        return `<div class="item-detail"><span>${name} x${i.quantity}</span><span style="color:var(--clr-brand);">฿${(i.unit_price*i.quantity).toFixed(0)}</span></div>`;
+      }).join('');
+      itemsRow.innerHTML = `<td colspan="7"><div class="items-inner">${itemsHTML}</div></td>`;
+
+      tbody.appendChild(tr);
+      tbody.appendChild(itemsRow);
+
+      tr.querySelector('.expand-btn').onclick = () => {
+        itemsRow.classList.toggle('open');
+      };
+    });
+  }
+
+  async function deleteOrder(id) {
+    if (!confirm('ยืนยันการลบออเดอร์นี้อย่างถาวร? / Confirm permanent deletion?')) return;
+    try {
+      const res = await fetch(`/api/orders/${id}`, { method: 'DELETE' });
+      if (res.ok) {
+        loadHistory(activeDays);
+        loadSummary();
+      } else {
+        alert('Failed to delete order');
+      }
+    } catch { alert('Error deleting order'); }
+  }
+
+  document.addEventListener('langChange', () => renderTable());
+
+  // Filter buttons
+  document.querySelectorAll('.filter-btn[data-days]').forEach(btn => {
+    btn.onclick = () => {
+      document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      const days = parseInt(btn.dataset.days);
+      document.getElementById('date-filter').value = '';
+      loadHistory(days);
+      loadSummary();
+    };
+  });
+
+  document.getElementById('date-filter').onchange = function() {
+    if (!this.value) return;
+    document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+    loadSummary(this.value);
+    // Filter orders to that date
+    const target = new Date(this.value);
+    const filtered = allOrders.filter(o => {
+      const d = new Date(o.created_at);
+      return d.toDateString() === target.toDateString() ||
+             d.getFullYear() === target.getFullYear() && d.getMonth() === target.getMonth() && d.getDate() === target.getDate();
+    });
+    renderTable(filtered);
+  };
+</script>
+</body>
+</html>
